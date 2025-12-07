@@ -22,6 +22,9 @@ export default function App() {
   const [isExamSeason, setIsExamSeason] = useState(false);
   const [importStatus, setImportStatus] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [classImages, setClassImages] = useState({});
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [pendingGenerate, setPendingGenerate] = useState(false);
   
   const COLORS = ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#22c55e', '#3b82f6', '#06b6d4', '#d946ef'];
 
@@ -216,6 +219,7 @@ export default function App() {
         const newDayOffRequests = {};
         const newClassSchedules = {};
         const newExamSchedules = {};
+        const newClassImages = {};
         
         data.forEach((row, index) => {
           if (!row.name) return;
@@ -243,12 +247,14 @@ export default function App() {
           newDayOffRequests[staffId] = daysOff;
           newClassSchedules[staffId] = [];
           newExamSchedules[staffId] = [];
+          newClassImages[staffId] = [];
         });
 
         setStaff(newStaff);
         setDayOffRequests(newDayOffRequests);
         setClassSchedules(newClassSchedules);
         setExamSchedules(newExamSchedules);
+        setClassImages(newClassImages);
         setSimonsSchedule({});
         setAnnexSchedule({});
         
@@ -308,6 +314,7 @@ export default function App() {
       setClassSchedules({ ...classSchedules, [newId]: [] });
       setDayOffRequests({ ...dayOffRequests, [newId]: [] });
       setExamSchedules({ ...examSchedules, [newId]: [] });
+      setClassImages({ ...classImages, [newId]: [] });
       setNewStaffName('');
     }
   };
@@ -317,9 +324,11 @@ export default function App() {
     const { [id]: _, ...restClasses } = classSchedules;
     const { [id]: __, ...restDayOff } = dayOffRequests;
     const { [id]: ___, ...restExams } = examSchedules;
+    const { [id]: ____, ...restImages } = classImages;
     setClassSchedules(restClasses);
     setDayOffRequests(restDayOff);
     setExamSchedules(restExams);
+    setClassImages(restImages);
   };
 
   const addClass = (staffId, classData) => {
@@ -436,6 +445,35 @@ export default function App() {
   const assignShift = (dateStr, staffId) => { setSchedule({ ...schedule, [dateStr]: staffId }); setEditingShift(null); };
   const unassignShift = (dateStr) => { const { [dateStr]: _, ...rest } = schedule; setSchedule(rest); };
 
+  const addClassImage = (staffId, imageData) => {
+    setClassImages({
+      ...classImages,
+      [staffId]: [...(classImages[staffId] || []), imageData]
+    });
+  };
+
+  const removeClassImage = (staffId, index) => {
+    setClassImages({
+      ...classImages,
+      [staffId]: classImages[staffId].filter((_, i) => i !== index)
+    });
+  };
+
+  const handlePreGenerate = () => {
+    if (conflicts.length > 0) {
+      setShowConflictModal(true);
+      setPendingGenerate(true);
+    } else {
+      generateSchedule();
+    }
+  };
+
+  const confirmGenerate = () => {
+    setShowConflictModal(false);
+    setPendingGenerate(false);
+    generateSchedule();
+  };
+
   const shiftCounts = useMemo(() => {
     const counts = {};
     staff.forEach(s => counts[s.id] = 0);
@@ -540,9 +578,9 @@ export default function App() {
 
           {activeTab === 'classes' && (
             <div>
-              <div style={{ marginBottom: '24px' }}><h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '600' }}>Class Schedules - {selectedBuilding.replace(' Don', '')}</h2><p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Set weekly recurring class times (24-hour format)</p></div>
+              <div style={{ marginBottom: '24px' }}><h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '600' }}>Class Schedules - {selectedBuilding.replace(' Don', '')}</h2><p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Upload screenshots or manually enter class times (24-hour format)</p></div>
               {filteredStaff.length === 0 && (<div style={{ textAlign: 'center', padding: '48px', color: '#64748b' }}><p>Import or add staff members first</p></div>)}
-              {filteredStaff.map(member => (<StaffClassSection key={member.id} member={member} classes={classSchedules[member.id] || []} onAddClass={(cls) => addClass(member.id, cls)} onRemoveClass={(idx) => removeClass(member.id, idx)} />))}
+              {filteredStaff.map(member => (<StaffClassSection key={member.id} member={member} classes={classSchedules[member.id] || []} images={classImages[member.id] || []} onAddClass={(cls) => addClass(member.id, cls)} onRemoveClass={(idx) => removeClass(member.id, idx)} onAddImage={(img) => addClassImage(member.id, img)} onRemoveImage={(idx) => removeClassImage(member.id, idx)} />))}
             </div>
           )}
 
@@ -595,9 +633,44 @@ export default function App() {
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <button onClick={clearSchedule} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.5)', background: 'transparent', color: '#ef4444', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}><Trash2 size={18} />Clear</button>
-                  <button onClick={generateSchedule} disabled={filteredStaff.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', border: 'none', background: filteredStaff.length === 0 ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: filteredStaff.length === 0 ? '#64748b' : '#fff', fontSize: '14px', fontWeight: '600', cursor: filteredStaff.length === 0 ? 'not-allowed' : 'pointer' }}><Shuffle size={18} />Auto-Generate</button>
+                  <button onClick={handlePreGenerate} disabled={filteredStaff.length === 0} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', border: 'none', background: filteredStaff.length === 0 ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: filteredStaff.length === 0 ? '#64748b' : '#fff', fontSize: '14px', fontWeight: '600', cursor: filteredStaff.length === 0 ? 'not-allowed' : 'pointer' }}><Shuffle size={18} />Auto-Generate</button>
                 </div>
               </div>
+
+              {/* Conflict Modal */}
+              {showConflictModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                  <div style={{ background: '#1e1b4b', borderRadius: '20px', padding: '24px', maxWidth: '600px', width: '90%', maxHeight: '80vh', overflow: 'auto', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                      <AlertTriangle size={24} style={{ color: '#f59e0b' }} />
+                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Conflicts Detected</h3>
+                    </div>
+                    <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '20px' }}>
+                      {conflicts.length} day(s) have no available staff. The schedule will be generated with these days left unassigned.
+                    </p>
+                    <div style={{ maxHeight: '300px', overflow: 'auto', marginBottom: '20px' }}>
+                      {conflicts.map(conflict => (
+                        <div key={conflict.date} style={{ background: 'rgba(239, 68, 68, 0.1)', borderRadius: '10px', padding: '12px', marginBottom: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                          <div style={{ fontWeight: '600', fontSize: '14px', color: '#f87171', marginBottom: '4px' }}>{conflict.dayName}, {conflict.day}</div>
+                          <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                            {conflict.unavailable.map(u => u.member.name + ': ' + u.reasons.join(', ')).join(' | ')}
+                          </div>
+                          {conflict.recommendation && (
+                            <div style={{ fontSize: '12px', color: '#4ade80', marginTop: '4px' }}>
+                              Suggested: {conflict.recommendation.member.name} — {conflict.recommendation.reason}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                      <button onClick={() => { setShowConflictModal(false); setPendingGenerate(false); }} style={{ padding: '10px 20px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#94a3b8', fontSize: '14px', cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => { setShowConflictModal(false); setActiveTab('conflicts'); }} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>View Conflicts</button>
+                      <button onClick={confirmGenerate} style={{ padding: '10px 20px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Generate Anyway</button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {filteredStaff.length === 0 ? (<div style={{ textAlign: 'center', padding: '48px', color: '#64748b' }}><Calendar size={48} style={{ marginBottom: '16px', opacity: 0.5 }} /><p>Import or add {selectedBuilding.replace(' Don', '')} staff first</p></div>) : (
                 <>
@@ -636,17 +709,57 @@ export default function App() {
   );
 }
 
-function StaffClassSection({ member, classes, onAddClass, onRemoveClass }) {
+function StaffClassSection({ member, classes, images, onAddClass, onRemoveClass, onAddImage, onRemoveImage }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newClass, setNewClass] = useState({ day: 1, start: '18:00', end: '21:00', name: '' });
+  const [showImages, setShowImages] = useState(false);
   const handleAdd = () => { if (newClass.name.trim()) { onAddClass({ ...newClass, day: parseInt(newClass.day) }); setNewClass({ day: 1, start: '18:00', end: '21:00', name: '' }); setIsAdding(false); } };
   
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        onAddImage({ data: event.target.result, name: file.name });
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
   return (
     <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '36px', height: '36px', borderRadius: '10px', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '14px' }}>{member.name.substring(0, 2).toUpperCase()}</div><span style={{ fontWeight: '600' }}>{member.name}</span></div>
-        {!isAdding && (<button onClick={() => setIsAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '13px', cursor: 'pointer' }}><Plus size={16} />Add Class</button>)}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: 'none', background: 'rgba(20, 184, 166, 0.2)', color: '#14b8a6', fontSize: '13px', cursor: 'pointer' }}>
+            <Upload size={16} />Upload Screenshots
+            <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{ display: 'none' }} />
+          </label>
+          {!isAdding && (<button onClick={() => setIsAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '13px', cursor: 'pointer' }}><Plus size={16} />Add Class</button>)}
+        </div>
       </div>
+
+      {/* Uploaded Images */}
+      {images && images.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <button onClick={() => setShowImages(!showImages)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(20, 184, 166, 0.1)', border: '1px solid rgba(20, 184, 166, 0.3)', borderRadius: '8px', color: '#14b8a6', fontSize: '13px', cursor: 'pointer', marginBottom: '8px' }}>
+            {showImages ? '▼' : '▶'} {images.length} screenshot{images.length > 1 ? 's' : ''} uploaded
+          </button>
+          {showImages && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px' }}>
+              {images.map((img, idx) => (
+                <div key={idx} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <img src={img.data} alt={img.name} style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block', cursor: 'pointer' }} onClick={() => window.open(img.data, '_blank')} />
+                  <button onClick={() => onRemoveImage(idx)} style={{ position: 'absolute', top: '4px', right: '4px', padding: '4px', borderRadius: '4px', border: 'none', background: 'rgba(239, 68, 68, 0.9)', color: '#fff', cursor: 'pointer' }}><X size={12} /></button>
+                  <div style={{ padding: '6px', fontSize: '11px', color: '#94a3b8', background: 'rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{img.name}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {isAdding && (<div style={{ display: 'flex', gap: '12px', marginBottom: '16px', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="text" placeholder="Class name" value={newClass.name} onChange={(e) => setNewClass({ ...newClass, name: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px', flex: 1, minWidth: '120px' }} />
         <select value={newClass.day} onChange={(e) => setNewClass({ ...newClass, day: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(30,27,75,1)', color: '#fff', fontSize: '14px' }}>{DAYS_OF_WEEK.map((day, idx) => (<option key={day} value={idx}>{day}</option>))}</select>
@@ -656,7 +769,7 @@ function StaffClassSection({ member, classes, onAddClass, onRemoveClass }) {
         <button onClick={handleAdd} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Save</button>
         <button onClick={() => setIsAdding(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#94a3b8', fontSize: '14px', cursor: 'pointer' }}>Cancel</button>
       </div>)}
-      {classes.length === 0 && !isAdding && <div style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic' }}>No classes added</div>}
+      {classes.length === 0 && !isAdding && <div style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic' }}>No classes added — upload screenshots for reference or add manually</div>}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>{classes.map((cls, idx) => (<div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'rgba(99, 102, 241, 0.15)', borderRadius: '10px', border: '1px solid rgba(99, 102, 241, 0.3)' }}><BookOpen size={14} style={{ color: '#a5b4fc' }} /><div><div style={{ fontWeight: '600', fontSize: '13px' }}>{cls.name}</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>{DAYS_OF_WEEK[cls.day]} {cls.start} - {cls.end}</div></div><button onClick={() => onRemoveClass(idx)} style={{ padding: '4px', borderRadius: '4px', border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}><X size={14} /></button></div>))}</div>
     </div>
   );
