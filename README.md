@@ -167,7 +167,7 @@ don-scheduler/
 
 - [ ] Export schedule as image/PDF
 - [ ] Save/load schedules to localStorage
-- [ ] Sync with Google Calendar
+- [ ] Sync with Outlook Calendar
 - [ ] Dark/light theme toggle
 - [ ] Multiple schedule templates
 - [ ] Resident tracking for connections
