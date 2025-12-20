@@ -15,7 +15,7 @@ export default function App() {
   const [dayOffRequests, setDayOffRequests] = useState({});
   const [examSchedules, setExamSchedules] = useState({});
   
-  const [simonsSchedule, setSimonsSchedule] = useState({});
+  const [symonsSchedule, setSymonsSchedule] = useState({});
   const [annexSchedule, setAnnexSchedule] = useState({});
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [editingShift, setEditingShift] = useState(null);
@@ -28,8 +28,8 @@ export default function App() {
   
   const COLORS = ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#22c55e', '#3b82f6', '#06b6d4', '#d946ef'];
 
-  const schedule = selectedBuilding === 'Simons Don' ? simonsSchedule : annexSchedule;
-  const setSchedule = selectedBuilding === 'Simons Don' ? setSimonsSchedule : setAnnexSchedule;
+  const schedule = selectedBuilding === 'Symons Don' ? symonsSchedule : annexSchedule;
+  const setSchedule = selectedBuilding === 'Symons Don' ? setSymonsSchedule : setAnnexSchedule;
 
   const filteredStaff = useMemo(() => {
     return staff.filter(s => s.building === selectedBuilding);
