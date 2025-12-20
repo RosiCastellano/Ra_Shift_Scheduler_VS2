@@ -181,5 +181,3 @@ Pull requests welcome! This is an open project to help student residence staff.
 MIT License - feel free to use and modify for your residence!
 
 ---
-
-Made with ❤️ for Dons everywhere
