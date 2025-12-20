@@ -255,7 +255,7 @@ export default function App() {
         setClassSchedules(newClassSchedules);
         setExamSchedules(newExamSchedules);
         setClassImages(newClassImages);
-        setSimonsSchedule({});
+        setSymonsSchedule({});
         setAnnexSchedule({});
         
         setImportStatus({ type: 'success', message: `Imported ${newStaff.length} staff members successfully!` });
