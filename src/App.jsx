@@ -7,9 +7,9 @@ const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export default function App() {
   const [activeTab, setActiveTab] = useState('import');
   const [staff, setStaff] = useState([]);
-  const [selectedBuilding, setSelectedBuilding] = useState('Simons Don');
+  const [selectedBuilding, setSelectedBuilding] = useState('Symons Don');
   const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffBuilding, setNewStaffBuilding] = useState('Simons Don');
+  const [newStaffBuilding, setNewStaffBuilding] = useState('Symons Don');
   
   const [classSchedules, setClassSchedules] = useState({});
   const [dayOffRequests, setDayOffRequests] = useState({});
