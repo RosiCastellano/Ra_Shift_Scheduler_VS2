@@ -19,20 +19,27 @@ const DAY_NAME_TO_NUMBER = {
 const convertTo24Hour = (timeStr) => {
   if (!timeStr) return null;
   
-  const cleaned = timeStr.trim().toUpperCase();
+  // Clean up the string - remove extra spaces and normalize
+  const cleaned = timeStr.trim().toUpperCase().replace(/\s+/g, ' ');
   
   // Check if already in 24-hour format (e.g., "18:00")
-  if (/^\d{1,2}:\d{2}$/.test(cleaned) && !cleaned.includes('AM') && !cleaned.includes('PM')) {
+  if (/^\d{1,2}:\d{2}$/.test(cleaned)) {
     const [hours, minutes] = cleaned.split(':').map(Number);
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    }
   }
   
-  // Parse 12-hour format (e.g., "8:00 AM", "6:00 PM")
+  // Parse 12-hour format (e.g., "8:00 AM", "6:00 PM", "8:00AM", "6:00PM")
   const match = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
   if (!match) return null;
   
   let [, hours, minutes, period] = match;
   hours = parseInt(hours);
+  const mins = parseInt(minutes);
+  
+  // Validate
+  if (hours < 1 || hours > 12 || mins < 0 || mins > 59) return null;
   
   if (period === 'AM') {
     if (hours === 12) hours = 0;
@@ -40,7 +47,7 @@ const convertTo24Hour = (timeStr) => {
     if (hours !== 12) hours += 12;
   }
   
-  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
 };
 
 export default function App() {
@@ -239,17 +246,19 @@ export default function App() {
 
   // Parse class schedule CSV
   const parseClassCSV = (text) => {
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+    // Handle Windows line endings (\r\n) and normalize
+    const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = normalizedText.split('\n').map(line => line.trim()).filter(line => line);
     const classes = [];
     let staffName = '';
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const values = parseCSVLine(line);
+      const values = parseCSVLine(line).map(v => v.trim());
       
       // First line is the staff name
       if (i === 0) {
-        staffName = values[0]?.trim() || '';
+        staffName = values[0] || '';
         continue;
       }
       
@@ -259,10 +268,10 @@ export default function App() {
       }
       
       // Parse class row
-      const dayName = values[0]?.trim().toLowerCase();
-      const startTime = values[1]?.trim();
-      const endTime = values[2]?.trim();
-      const courseName = values[3]?.trim();
+      const dayName = values[0]?.toLowerCase();
+      const startTime = values[1];
+      const endTime = values[2];
+      const courseName = values[3];
       
       if (!dayName || !startTime || !endTime || !courseName) continue;
       
