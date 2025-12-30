@@ -4,12 +4,51 @@ import { Calendar, Users, Clock, BookOpen, GraduationCap, Shuffle, ChevronLeft, 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// Map day names to day numbers
+const DAY_NAME_TO_NUMBER = {
+  'sunday': 0, 'sun': 0,
+  'monday': 1, 'mon': 1,
+  'tuesday': 2, 'tue': 2, 'tues': 2,
+  'wednesday': 3, 'wed': 3,
+  'thursday': 4, 'thu': 4, 'thur': 4, 'thurs': 4,
+  'friday': 5, 'fri': 5,
+  'saturday': 6, 'sat': 6
+};
+
+// Convert 12-hour time to 24-hour format
+const convertTo24Hour = (timeStr) => {
+  if (!timeStr) return null;
+  
+  const cleaned = timeStr.trim().toUpperCase();
+  
+  // Check if already in 24-hour format (e.g., "18:00")
+  if (/^\d{1,2}:\d{2}$/.test(cleaned) && !cleaned.includes('AM') && !cleaned.includes('PM')) {
+    const [hours, minutes] = cleaned.split(':').map(Number);
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+  
+  // Parse 12-hour format (e.g., "8:00 AM", "6:00 PM")
+  const match = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  if (!match) return null;
+  
+  let [, hours, minutes, period] = match;
+  hours = parseInt(hours);
+  
+  if (period === 'AM') {
+    if (hours === 12) hours = 0;
+  } else { // PM
+    if (hours !== 12) hours += 12;
+  }
+  
+  return `${hours.toString().padStart(2, '0')}:${minutes}`;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('import');
   const [staff, setStaff] = useState([]);
-  const [selectedBuilding, setSelectedBuilding] = useState('Symons Don');
+  const [selectedBuilding, setSelectedBuilding] = useState('Simons Don');
   const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffBuilding, setNewStaffBuilding] = useState('Symons Don');
+  const [newStaffBuilding, setNewStaffBuilding] = useState('Simons Don');
   
   const [classSchedules, setClassSchedules] = useState({});
   const [dayOffRequests, setDayOffRequests] = useState({});
@@ -22,14 +61,14 @@ export default function App() {
   const [isExamSeason, setIsExamSeason] = useState(false);
   const [importStatus, setImportStatus] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [classImages, setClassImages] = useState({});
+  const [classCSVFiles, setClassCSVFiles] = useState({});
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [pendingGenerate, setPendingGenerate] = useState(false);
   
   const COLORS = ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#22c55e', '#3b82f6', '#06b6d4', '#d946ef'];
 
-  const schedule = selectedBuilding === 'Symons Don' ? symonsSchedule : annexSchedule;
-  const setSchedule = selectedBuilding === 'Symons Don' ? setSymonsSchedule : setAnnexSchedule;
+  const schedule = selectedBuilding === 'Simons Don' ? symonsSchedule : annexSchedule;
+  const setSchedule = selectedBuilding === 'Simons Don' ? setSymonsSchedule : setAnnexSchedule;
 
   const filteredStaff = useMemo(() => {
     return staff.filter(s => s.building === selectedBuilding);
@@ -198,6 +237,54 @@ export default function App() {
     return result;
   };
 
+  // Parse class schedule CSV
+  const parseClassCSV = (text) => {
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+    const classes = [];
+    let staffName = '';
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const values = parseCSVLine(line);
+      
+      // First line is the staff name
+      if (i === 0) {
+        staffName = values[0]?.trim() || '';
+        continue;
+      }
+      
+      // Skip header row
+      if (values[0]?.toLowerCase().includes('day') || values[1]?.toLowerCase().includes('start')) {
+        continue;
+      }
+      
+      // Parse class row
+      const dayName = values[0]?.trim().toLowerCase();
+      const startTime = values[1]?.trim();
+      const endTime = values[2]?.trim();
+      const courseName = values[3]?.trim();
+      
+      if (!dayName || !startTime || !endTime || !courseName) continue;
+      
+      const dayNumber = DAY_NAME_TO_NUMBER[dayName];
+      if (dayNumber === undefined) continue;
+      
+      const start24 = convertTo24Hour(startTime);
+      const end24 = convertTo24Hour(endTime);
+      
+      if (!start24 || !end24) continue;
+      
+      classes.push({
+        day: dayNumber,
+        start: start24,
+        end: end24,
+        name: courseName
+      });
+    }
+    
+    return { staffName, classes };
+  };
+
   const processFile = useCallback((file) => {
     if (!file) return;
 
@@ -219,7 +306,7 @@ export default function App() {
         const newDayOffRequests = {};
         const newClassSchedules = {};
         const newExamSchedules = {};
-        const newClassImages = {};
+        const newClassCSVFiles = {};
         
         data.forEach((row, index) => {
           if (!row.name) return;
@@ -247,14 +334,14 @@ export default function App() {
           newDayOffRequests[staffId] = daysOff;
           newClassSchedules[staffId] = [];
           newExamSchedules[staffId] = [];
-          newClassImages[staffId] = [];
+          newClassCSVFiles[staffId] = [];
         });
 
         setStaff(newStaff);
         setDayOffRequests(newDayOffRequests);
         setClassSchedules(newClassSchedules);
         setExamSchedules(newExamSchedules);
-        setClassImages(newClassImages);
+        setClassCSVFiles(newClassCSVFiles);
         setSymonsSchedule({});
         setAnnexSchedule({});
         
@@ -314,7 +401,7 @@ export default function App() {
       setClassSchedules({ ...classSchedules, [newId]: [] });
       setDayOffRequests({ ...dayOffRequests, [newId]: [] });
       setExamSchedules({ ...examSchedules, [newId]: [] });
-      setClassImages({ ...classImages, [newId]: [] });
+      setClassCSVFiles({ ...classCSVFiles, [newId]: [] });
       setNewStaffName('');
     }
   };
@@ -324,11 +411,11 @@ export default function App() {
     const { [id]: _, ...restClasses } = classSchedules;
     const { [id]: __, ...restDayOff } = dayOffRequests;
     const { [id]: ___, ...restExams } = examSchedules;
-    const { [id]: ____, ...restImages } = classImages;
+    const { [id]: ____, ...restCSVFiles } = classCSVFiles;
     setClassSchedules(restClasses);
     setDayOffRequests(restDayOff);
     setExamSchedules(restExams);
-    setClassImages(restImages);
+    setClassCSVFiles(restCSVFiles);
   };
 
   const addClass = (staffId, classData) => {
@@ -337,11 +424,25 @@ export default function App() {
       [staffId]: [...(classSchedules[staffId] || []), classData],
     });
   };
+
+  const addMultipleClasses = (staffId, classesArray) => {
+    setClassSchedules({
+      ...classSchedules,
+      [staffId]: [...(classSchedules[staffId] || []), ...classesArray],
+    });
+  };
   
   const removeClass = (staffId, index) => {
     setClassSchedules({
       ...classSchedules,
       [staffId]: classSchedules[staffId].filter((_, i) => i !== index),
+    });
+  };
+
+  const clearAllClasses = (staffId) => {
+    setClassSchedules({
+      ...classSchedules,
+      [staffId]: [],
     });
   };
 
@@ -373,6 +474,20 @@ export default function App() {
     setExamSchedules({
       ...examSchedules,
       [staffId]: examSchedules[staffId].filter((_, i) => i !== index),
+    });
+  };
+
+  const addCSVFile = (staffId, fileData) => {
+    setClassCSVFiles({
+      ...classCSVFiles,
+      [staffId]: [...(classCSVFiles[staffId] || []), fileData]
+    });
+  };
+
+  const removeCSVFile = (staffId, index) => {
+    setClassCSVFiles({
+      ...classCSVFiles,
+      [staffId]: classCSVFiles[staffId].filter((_, i) => i !== index)
     });
   };
 
@@ -445,20 +560,6 @@ export default function App() {
   const assignShift = (dateStr, staffId) => { setSchedule({ ...schedule, [dateStr]: staffId }); setEditingShift(null); };
   const unassignShift = (dateStr) => { const { [dateStr]: _, ...rest } = schedule; setSchedule(rest); };
 
-  const addClassImage = (staffId, imageData) => {
-    setClassImages({
-      ...classImages,
-      [staffId]: [...(classImages[staffId] || []), imageData]
-    });
-  };
-
-  const removeClassImage = (staffId, index) => {
-    setClassImages({
-      ...classImages,
-      [staffId]: classImages[staffId].filter((_, i) => i !== index)
-    });
-  };
-
   const handlePreGenerate = () => {
     if (conflicts.length > 0) {
       setShowConflictModal(true);
@@ -512,8 +613,8 @@ export default function App() {
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%)', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#e2e8f0', padding: '24px' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 8px 0', background: 'linear-gradient(135deg, #a5b4fc 0%, #f0abfc 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>RA Shift Scheduler v2</h1>
-          <p style={{ margin: 0, color: '#94a3b8', fontSize: '15px' }}>Import from Microsoft Forms • Shifts: 20:00 - 22:00 Daily</p>
+          <h1 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 8px 0', background: 'linear-gradient(135deg, #a5b4fc 0%, #f0abfc 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>RA Shift Scheduler v3</h1>
+          <p style={{ margin: 0, color: '#94a3b8', fontSize: '15px' }}>Import from Microsoft Forms • CSV Class Schedules • Shifts: 20:00 - 22:00 Daily</p>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
@@ -578,9 +679,37 @@ export default function App() {
 
           {activeTab === 'classes' && (
             <div>
-              <div style={{ marginBottom: '24px' }}><h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '600' }}>Class Schedules - {selectedBuilding.replace(' Don', '')}</h2><p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Upload screenshots or manually enter class times (24-hour format)</p></div>
+              <div style={{ marginBottom: '24px' }}>
+                <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '600' }}>Class Schedules - {selectedBuilding.replace(' Don', '')}</h2>
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: '14px' }}>Upload CSV files or manually enter class times (24-hour format)</p>
+              </div>
+              
+              <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(20, 184, 166, 0.1)', borderRadius: '12px', border: '1px solid rgba(20, 184, 166, 0.3)' }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: '600', color: '#14b8a6' }}>CSV Format:</h4>
+                <pre style={{ margin: 0, fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+{`StaffName,,,
+Day,Start Time,End Time,Course
+Monday,8:00 AM,10:50 AM,COURSE-101
+Tuesday,6:00 PM,8:50 PM,COURSE-202`}
+                </pre>
+              </div>
+
               {filteredStaff.length === 0 && (<div style={{ textAlign: 'center', padding: '48px', color: '#64748b' }}><p>Import or add staff members first</p></div>)}
-              {filteredStaff.map(member => (<StaffClassSection key={member.id} member={member} classes={classSchedules[member.id] || []} images={classImages[member.id] || []} onAddClass={(cls) => addClass(member.id, cls)} onRemoveClass={(idx) => removeClass(member.id, idx)} onAddImage={(img) => addClassImage(member.id, img)} onRemoveImage={(idx) => removeClassImage(member.id, idx)} />))}
+              {filteredStaff.map(member => (
+                <StaffClassSection 
+                  key={member.id} 
+                  member={member} 
+                  classes={classSchedules[member.id] || []} 
+                  csvFiles={classCSVFiles[member.id] || []}
+                  onAddClass={(cls) => addClass(member.id, cls)} 
+                  onAddMultipleClasses={(classes) => addMultipleClasses(member.id, classes)}
+                  onRemoveClass={(idx) => removeClass(member.id, idx)} 
+                  onClearAllClasses={() => clearAllClasses(member.id)}
+                  onAddCSVFile={(file) => addCSVFile(member.id, file)}
+                  onRemoveCSVFile={(idx) => removeCSVFile(member.id, idx)}
+                  parseClassCSV={parseClassCSV}
+                />
+              ))}
             </div>
           )}
 
@@ -709,20 +838,39 @@ export default function App() {
   );
 }
 
-function StaffClassSection({ member, classes, images, onAddClass, onRemoveClass, onAddImage, onRemoveImage }) {
+function StaffClassSection({ member, classes, csvFiles, onAddClass, onAddMultipleClasses, onRemoveClass, onClearAllClasses, onAddCSVFile, onRemoveCSVFile, parseClassCSV }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newClass, setNewClass] = useState({ day: 1, start: '18:00', end: '21:00', name: '' });
-  const [showImages, setShowImages] = useState(false);
-  const handleAdd = () => { if (newClass.name.trim()) { onAddClass({ ...newClass, day: parseInt(newClass.day) }); setNewClass({ day: 1, start: '18:00', end: '21:00', name: '' }); setIsAdding(false); } };
+  const [showCSVFiles, setShowCSVFiles] = useState(false);
+  const [importMessage, setImportMessage] = useState(null);
   
-  const handleImageUpload = (e) => {
+  const handleAdd = () => { 
+    if (newClass.name.trim()) { 
+      onAddClass({ ...newClass, day: parseInt(newClass.day) }); 
+      setNewClass({ day: 1, start: '18:00', end: '21:00', name: '' }); 
+      setIsAdding(false); 
+    } 
+  };
+  
+  const handleCSVUpload = (e) => {
     const files = Array.from(e.target.files);
     files.forEach(file => {
       const reader = new FileReader();
       reader.onload = (event) => {
-        onAddImage({ data: event.target.result, name: file.name });
+        const text = event.target.result;
+        const { staffName, classes: parsedClasses } = parseClassCSV(text);
+        
+        if (parsedClasses.length > 0) {
+          onAddMultipleClasses(parsedClasses);
+          onAddCSVFile({ name: file.name, classCount: parsedClasses.length, staffName });
+          setImportMessage({ type: 'success', message: `Imported ${parsedClasses.length} classes from ${file.name}` });
+        } else {
+          setImportMessage({ type: 'error', message: `No valid classes found in ${file.name}` });
+        }
+        
+        setTimeout(() => setImportMessage(null), 3000);
       };
-      reader.readAsDataURL(file);
+      reader.readAsText(file);
     });
     e.target.value = '';
   };
@@ -730,29 +878,62 @@ function StaffClassSection({ member, classes, images, onAddClass, onRemoveClass,
   return (
     <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><div style={{ width: '36px', height: '36px', borderRadius: '10px', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '14px' }}>{member.name.substring(0, 2).toUpperCase()}</div><span style={{ fontWeight: '600' }}>{member.name}</span></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: member.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '14px' }}>{member.name.substring(0, 2).toUpperCase()}</div>
+          <span style={{ fontWeight: '600' }}>{member.name}</span>
+          <span style={{ fontSize: '12px', color: '#94a3b8', background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '6px' }}>{classes.length} classes</span>
+        </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          {classes.length > 0 && (
+            <button onClick={onClearAllClasses} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.5)', background: 'transparent', color: '#ef4444', fontSize: '13px', cursor: 'pointer' }}>
+              <Trash2 size={14} />Clear All
+            </button>
+          )}
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: 'none', background: 'rgba(20, 184, 166, 0.2)', color: '#14b8a6', fontSize: '13px', cursor: 'pointer' }}>
-            <Upload size={16} />Upload Screenshots
-            <input type="file" accept="image/*" multiple onChange={handleImageUpload} style={{ display: 'none' }} />
+            <FileSpreadsheet size={16} />Upload CSV
+            <input type="file" accept=".csv" multiple onChange={handleCSVUpload} style={{ display: 'none' }} />
           </label>
-          {!isAdding && (<button onClick={() => setIsAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '13px', cursor: 'pointer' }}><Plus size={16} />Add Class</button>)}
+          {!isAdding && (
+            <button onClick={() => setIsAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '13px', cursor: 'pointer' }}>
+              <Plus size={16} />Add Manual
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Uploaded Images */}
-      {images && images.length > 0 && (
+      {/* Import Message */}
+      {importMessage && (
+        <div style={{ 
+          marginBottom: '16px', 
+          padding: '12px 16px', 
+          background: importMessage.type === 'success' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+          border: `1px solid ${importMessage.type === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`, 
+          borderRadius: '10px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '10px' 
+        }}>
+          {importMessage.type === 'success' ? <Check size={16} style={{ color: '#22c55e' }} /> : <AlertCircle size={16} style={{ color: '#ef4444' }} />}
+          <span style={{ color: importMessage.type === 'success' ? '#4ade80' : '#f87171', fontSize: '13px' }}>{importMessage.message}</span>
+        </div>
+      )}
+
+      {/* Uploaded CSV Files */}
+      {csvFiles && csvFiles.length > 0 && (
         <div style={{ marginBottom: '16px' }}>
-          <button onClick={() => setShowImages(!showImages)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(20, 184, 166, 0.1)', border: '1px solid rgba(20, 184, 166, 0.3)', borderRadius: '8px', color: '#14b8a6', fontSize: '13px', cursor: 'pointer', marginBottom: '8px' }}>
-            {showImages ? '▼' : '▶'} {images.length} screenshot{images.length > 1 ? 's' : ''} uploaded
+          <button onClick={() => setShowCSVFiles(!showCSVFiles)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(20, 184, 166, 0.1)', border: '1px solid rgba(20, 184, 166, 0.3)', borderRadius: '8px', color: '#14b8a6', fontSize: '13px', cursor: 'pointer', marginBottom: '8px' }}>
+            {showCSVFiles ? '▼' : '▶'} {csvFiles.length} CSV file{csvFiles.length > 1 ? 's' : ''} imported
           </button>
-          {showImages && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px' }}>
-              {images.map((img, idx) => (
-                <div key={idx} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <img src={img.data} alt={img.name} style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block', cursor: 'pointer' }} onClick={() => window.open(img.data, '_blank')} />
-                  <button onClick={() => onRemoveImage(idx)} style={{ position: 'absolute', top: '4px', right: '4px', padding: '4px', borderRadius: '4px', border: 'none', background: 'rgba(239, 68, 68, 0.9)', color: '#fff', cursor: 'pointer' }}><X size={12} /></button>
-                  <div style={{ padding: '6px', fontSize: '11px', color: '#94a3b8', background: 'rgba(0,0,0,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{img.name}</div>
+          {showCSVFiles && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {csvFiles.map((file, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(20, 184, 166, 0.1)', borderRadius: '8px', border: '1px solid rgba(20, 184, 166, 0.2)' }}>
+                  <FileSpreadsheet size={14} style={{ color: '#14b8a6' }} />
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#fff' }}>{file.name}</div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>{file.classCount} classes</div>
+                  </div>
+                  <button onClick={() => onRemoveCSVFile(idx)} style={{ padding: '4px', borderRadius: '4px', border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}><X size={12} /></button>
                 </div>
               ))}
             </div>
@@ -760,17 +941,34 @@ function StaffClassSection({ member, classes, images, onAddClass, onRemoveClass,
         </div>
       )}
 
-      {isAdding && (<div style={{ display: 'flex', gap: '12px', marginBottom: '16px', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input type="text" placeholder="Class name" value={newClass.name} onChange={(e) => setNewClass({ ...newClass, name: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px', flex: 1, minWidth: '120px' }} />
-        <select value={newClass.day} onChange={(e) => setNewClass({ ...newClass, day: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(30,27,75,1)', color: '#fff', fontSize: '14px' }}>{DAYS_OF_WEEK.map((day, idx) => (<option key={day} value={idx}>{day}</option>))}</select>
-        <input type="time" value={newClass.start} onChange={(e) => setNewClass({ ...newClass, start: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px' }} />
-        <span style={{ color: '#64748b' }}>to</span>
-        <input type="time" value={newClass.end} onChange={(e) => setNewClass({ ...newClass, end: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px' }} />
-        <button onClick={handleAdd} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Save</button>
-        <button onClick={() => setIsAdding(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#94a3b8', fontSize: '14px', cursor: 'pointer' }}>Cancel</button>
-      </div>)}
-      {classes.length === 0 && !isAdding && <div style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic' }}>No classes added — upload screenshots for reference or add manually</div>}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>{classes.map((cls, idx) => (<div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'rgba(99, 102, 241, 0.15)', borderRadius: '10px', border: '1px solid rgba(99, 102, 241, 0.3)' }}><BookOpen size={14} style={{ color: '#a5b4fc' }} /><div><div style={{ fontWeight: '600', fontSize: '13px' }}>{cls.name}</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>{DAYS_OF_WEEK[cls.day]} {cls.start} - {cls.end}</div></div><button onClick={() => onRemoveClass(idx)} style={{ padding: '4px', borderRadius: '4px', border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}><X size={14} /></button></div>))}</div>
+      {isAdding && (
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input type="text" placeholder="Class name" value={newClass.name} onChange={(e) => setNewClass({ ...newClass, name: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px', flex: 1, minWidth: '120px' }} />
+          <select value={newClass.day} onChange={(e) => setNewClass({ ...newClass, day: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(30,27,75,1)', color: '#fff', fontSize: '14px' }}>
+            {DAYS_OF_WEEK.map((day, idx) => (<option key={day} value={idx}>{day}</option>))}
+          </select>
+          <input type="time" value={newClass.start} onChange={(e) => setNewClass({ ...newClass, start: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px' }} />
+          <span style={{ color: '#64748b' }}>to</span>
+          <input type="time" value={newClass.end} onChange={(e) => setNewClass({ ...newClass, end: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px' }} />
+          <button onClick={handleAdd} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#22c55e', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Save</button>
+          <button onClick={() => setIsAdding(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: '#94a3b8', fontSize: '14px', cursor: 'pointer' }}>Cancel</button>
+        </div>
+      )}
+      
+      {classes.length === 0 && !isAdding && <div style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic' }}>No classes added — upload a CSV or add manually</div>}
+      
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {classes.map((cls, idx) => (
+          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'rgba(99, 102, 241, 0.15)', borderRadius: '10px', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+            <BookOpen size={14} style={{ color: '#a5b4fc' }} />
+            <div>
+              <div style={{ fontWeight: '600', fontSize: '13px' }}>{cls.name}</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8' }}>{DAYS_OF_WEEK[cls.day]} {cls.start} - {cls.end}</div>
+            </div>
+            <button onClick={() => onRemoveClass(idx)} style={{ padding: '4px', borderRadius: '4px', border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}><X size={14} /></button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
