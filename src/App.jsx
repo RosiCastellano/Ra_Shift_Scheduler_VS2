@@ -46,9 +46,9 @@ const convertTo24Hour = (timeStr) => {
 export default function App() {
   const [activeTab, setActiveTab] = useState('import');
   const [staff, setStaff] = useState([]);
-  const [selectedBuilding, setSelectedBuilding] = useState('Simons Don');
+  const [selectedBuilding, setSelectedBuilding] = useState('Symons Don');
   const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffBuilding, setNewStaffBuilding] = useState('Simons Don');
+  const [newStaffBuilding, setNewStaffBuilding] = useState('Symons Don');
   
   const [classSchedules, setClassSchedules] = useState({});
   const [dayOffRequests, setDayOffRequests] = useState({});
@@ -67,8 +67,8 @@ export default function App() {
   
   const COLORS = ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#22c55e', '#3b82f6', '#06b6d4', '#d946ef'];
 
-  const schedule = selectedBuilding === 'Simons Don' ? symonsSchedule : annexSchedule;
-  const setSchedule = selectedBuilding === 'Simons Don' ? setSymonsSchedule : setAnnexSchedule;
+  const schedule = selectedBuilding === 'Symons Don' ? symonsSchedule : annexSchedule;
+  const setSchedule = selectedBuilding === 'Symons Don' ? setSymonsSchedule : setAnnexSchedule;
 
   const filteredStaff = useMemo(() => {
     return staff.filter(s => s.building === selectedBuilding);
@@ -315,7 +315,7 @@ export default function App() {
           const staffMember = {
             id: staffId,
             name: row.name.charAt(0).toUpperCase() + row.name.slice(1).toLowerCase(),
-            building: row.building || 'Simons Don',
+            building: row.building || 'Symons Don',
             color: COLORS[index % COLORS.length],
             notes: row.notes
           };
@@ -618,8 +618,8 @@ export default function App() {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          {['Simons Don', 'Annex Don'].map(building => (
-            <button key={building} onClick={() => setSelectedBuilding(building)} style={{ padding: '12px 24px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: '700', background: selectedBuilding === building ? (building === 'Simons Don' ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : 'linear-gradient(135deg, #ec4899 0%, #f472b6 100%)') : 'rgba(255,255,255,0.1)', color: selectedBuilding === building ? '#fff' : '#94a3b8', boxShadow: selectedBuilding === building ? '0 4px 15px rgba(99, 102, 241, 0.3)' : 'none' }}>{building.replace(' Don', '')}</button>
+          {['Symons Don', 'Annex Don'].map(building => (
+            <button key={building} onClick={() => setSelectedBuilding(building)} style={{ padding: '12px 24px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontSize: '15px', fontWeight: '700', background: selectedBuilding === building ? (building === 'Symons Don' ? 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' : 'linear-gradient(135deg, #ec4899 0%, #f472b6 100%)') : 'rgba(255,255,255,0.1)', color: selectedBuilding === building ? '#fff' : '#94a3b8', boxShadow: selectedBuilding === building ? '0 4px 15px rgba(99, 102, 241, 0.3)' : 'none' }}>{building.replace(' Don', '')}</button>
           ))}
         </div>
 
@@ -654,7 +654,7 @@ export default function App() {
 
               {importStatus && (<div style={{ marginTop: '24px', padding: '16px 20px', background: importStatus.type === 'success' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: `1px solid ${importStatus.type === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`, borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>{importStatus.type === 'success' ? <Check size={20} style={{ color: '#22c55e' }} /> : <AlertCircle size={20} style={{ color: '#ef4444' }} />}<span style={{ color: importStatus.type === 'success' ? '#4ade80' : '#f87171' }}>{importStatus.message}</span></div>)}
 
-              <div style={{ marginTop: '24px', padding: '20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}><h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#94a3b8' }}>Expected Form Fields:</h3><ul style={{ margin: 0, paddingLeft: '20px', color: '#64748b', fontSize: '13px', lineHeight: '1.8' }}><li><strong style={{ color: '#94a3b8' }}>Name</strong> — RA's name</li><li><strong style={{ color: '#94a3b8' }}>Which Don group are you?</strong> — "Simons Don" or "Annex Don"</li><li><strong style={{ color: '#94a3b8' }}>Days off</strong> — Comma-separated day numbers (e.g., "12,13,17")</li></ul></div>
+              <div style={{ marginTop: '24px', padding: '20px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}><h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#94a3b8' }}>Expected Form Fields:</h3><ul style={{ margin: 0, paddingLeft: '20px', color: '#64748b', fontSize: '13px', lineHeight: '1.8' }}><li><strong style={{ color: '#94a3b8' }}>Name</strong> — RA's name</li><li><strong style={{ color: '#94a3b8' }}>Which Don group are you?</strong> — "Symons Don" or "Annex Don"</li><li><strong style={{ color: '#94a3b8' }}>Days off</strong> — Comma-separated day numbers (e.g., "12,13,17")</li></ul></div>
             </div>
           )}
 
@@ -664,7 +664,7 @@ export default function App() {
                 <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600' }}>{selectedBuilding.replace(' Don', '')} Staff ({filteredStaff.length})</h2>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   <input type="text" value={newStaffName} onChange={(e) => setNewStaffName(e.target.value)} placeholder="New RA name..." onKeyPress={(e) => e.key === 'Enter' && addStaff()} style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '14px', width: '150px' }} />
-                  <select value={newStaffBuilding} onChange={(e) => setNewStaffBuilding(e.target.value)} style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(30,27,75,1)', color: '#fff', fontSize: '14px' }}><option value="Simons Don">Simons</option><option value="Annex Don">Annex</option></select>
+                  <select value={newStaffBuilding} onChange={(e) => setNewStaffBuilding(e.target.value)} style={{ padding: '10px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(30,27,75,1)', color: '#fff', fontSize: '14px' }}><option value="Symons Don">Symons</option><option value="Annex Don">Annex</option></select>
                   <button onClick={addStaff} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}><Plus size={18} />Add RA</button>
                 </div>
               </div>
