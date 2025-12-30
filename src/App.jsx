@@ -1,10 +1,37 @@
+/**
+ * RA SHIFT SCHEDULER
+ * ===================
+ * A comprehensive scheduling application for Resident Advisors (RAs)
+ * 
+ * FEATURES:
+ * - Import staff from Microsoft Forms CSV exports
+ * - Upload class schedules via CSV files (supports 12-hour AM/PM format)
+ * - Manage day-off requests
+ * - Track exam schedules with automatic buffer days
+ * - Auto-generate fair shift assignments
+ * - Conflict detection and resolution recommendations
+ * - Separate schedules for different buildings (Symons Don & Annex Don)
+ * 
+ * SHIFT TIME: 20:00 - 22:00 (8 PM - 10 PM) Daily
+ */
+
 import React, { useState, useMemo, useCallback } from 'react';
 import { Calendar, Users, Clock, BookOpen, GraduationCap, Shuffle, ChevronLeft, ChevronRight, Plus, X, Check, AlertCircle, Trash2, Upload, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+/** Days of the week - full names for display */
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Days of the week - abbreviated for calendar headers */
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// Map day names to day numbers
+/** 
+ * Maps day names (and common abbreviations) to their numeric index
+ * Used for parsing CSV class schedules
+ */
 const DAY_NAME_TO_NUMBER = {
   'sunday': 0, 'sun': 0,
   'monday': 1, 'mon': 1,
@@ -15,7 +42,23 @@ const DAY_NAME_TO_NUMBER = {
   'saturday': 6, 'sat': 6
 };
 
-// Convert 12-hour time to 24-hour format
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Converts 12-hour time format to 24-hour format
+ * 
+ * @param {string} timeStr - Time string like "8:00 AM", "6:00 PM", or "18:00"
+ * @returns {string|null} - 24-hour format like "08:00", "18:00", or null if invalid
+ * 
+ * Examples:
+ *   "8:00 AM"  -> "08:00"
+ *   "6:00 PM"  -> "18:00"
+ *   "12:00 PM" -> "12:00"
+ *   "12:00 AM" -> "00:00"
+ *   "18:00"    -> "18:00" (already 24-hour, passed through)
+ */
 const convertTo24Hour = (timeStr) => {
   if (!timeStr) return null;
   
@@ -50,37 +93,113 @@ const convertTo24Hour = (timeStr) => {
   return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
 };
 
+// ============================================================================
+// MAIN APPLICATION COMPONENT
+// ============================================================================
+
 export default function App() {
+  // --------------------------------------------------------------------------
+  // STATE MANAGEMENT
+  // --------------------------------------------------------------------------
+  
+  /** Current active tab in the navigation */
   const [activeTab, setActiveTab] = useState('import');
+  
+  /** Array of all staff members across both buildings */
   const [staff, setStaff] = useState([]);
+  
+  /** Currently selected building filter ('Symons Don' or 'Annex Don') */
   const [selectedBuilding, setSelectedBuilding] = useState('Symons Don');
+  
+  /** Input fields for adding new staff manually */
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffBuilding, setNewStaffBuilding] = useState('Symons Don');
   
+  /** 
+   * Class schedules for each staff member
+   * Format: { staffId: [{ day: 0-6, start: "HH:MM", end: "HH:MM", name: "Course" }] }
+   */
   const [classSchedules, setClassSchedules] = useState({});
+  
+  /** 
+   * Day-off requests for each staff member
+   * Format: { staffId: ["YYYY-MM-DD", ...] }
+   */
   const [dayOffRequests, setDayOffRequests] = useState({});
+  
+  /** 
+   * Exam schedules for each staff member
+   * Format: { staffId: [{ date: "YYYY-MM-DD", name: "Exam", time: "HH:MM" }] }
+   */
   const [examSchedules, setExamSchedules] = useState({});
   
+  /** 
+   * Shift assignments for Symons building
+   * Format: { "YYYY-MM-DD": staffId }
+   */
   const [symonsSchedule, setSymonsSchedule] = useState({});
+  
+  /** 
+   * Shift assignments for Annex building
+   * Format: { "YYYY-MM-DD": staffId }
+   */
   const [annexSchedule, setAnnexSchedule] = useState({});
+  
+  /** Currently displayed month in the calendar */
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  /** Date string of shift currently being edited (for dropdown) */
   const [editingShift, setEditingShift] = useState(null);
+  
+  /** Whether exam season mode is enabled (gives extra days off around exams) */
   const [isExamSeason, setIsExamSeason] = useState(false);
+  
+  /** Status message for file imports */
   const [importStatus, setImportStatus] = useState(null);
+  
+  /** Whether a file is being dragged over the drop zone */
   const [isDragging, setIsDragging] = useState(false);
+  
+  /** Uploaded CSV files for class schedules (for reference display) */
   const [classCSVFiles, setClassCSVFiles] = useState({});
+  
+  /** Whether the conflict warning modal is shown */
   const [showConflictModal, setShowConflictModal] = useState(false);
+  
+  /** Whether a generate action is pending (waiting for conflict confirmation) */
   const [pendingGenerate, setPendingGenerate] = useState(false);
   
+  /** Color palette for staff member avatars */
   const COLORS = ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#22c55e', '#3b82f6', '#06b6d4', '#d946ef'];
 
+  // --------------------------------------------------------------------------
+  // DERIVED STATE
+  // --------------------------------------------------------------------------
+  
+  /** Get the schedule for the currently selected building */
   const schedule = selectedBuilding === 'Symons Don' ? symonsSchedule : annexSchedule;
   const setSchedule = selectedBuilding === 'Symons Don' ? setSymonsSchedule : setAnnexSchedule;
 
+  /** Filter staff to only show those in the selected building */
   const filteredStaff = useMemo(() => {
     return staff.filter(s => s.building === selectedBuilding);
   }, [staff, selectedBuilding]);
 
+  // --------------------------------------------------------------------------
+  // CONFLICT DETECTION
+  // --------------------------------------------------------------------------
+  
+  /**
+   * Calculates all scheduling conflicts for the current month
+   * A conflict occurs when NO staff members are available for a given day
+   * 
+   * Checks for:
+   * 1. Day-off requests
+   * 2. Class conflicts (class time overlaps with 20:00-22:00 shift)
+   * 3. Exam conflicts (day before, day of, and day after exam - if exam season enabled)
+   * 
+   * Returns array of conflict objects with recommendations for best person to assign
+   */
   const conflicts = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -162,6 +281,17 @@ export default function App() {
     return conflictList;
   }, [filteredStaff, dayOffRequests, classSchedules, examSchedules, isExamSeason, currentMonth]);
 
+  /**
+   * Determines the best staff member to recommend for a conflict day
+   * 
+   * Priority order (best to worst):
+   * 1. Someone with only a day-off request (can be negotiated)
+   * 2. Someone with a class conflict (might be able to swap)
+   * 3. Someone with an exam conflict (least flexible)
+   * 
+   * @param {Array} unavailableStaff - List of unavailable staff with their reasons
+   * @returns {Object|null} - Recommended staff member and reason
+   */
   const getBestRecommendation = (unavailableStaff) => {
     const sorted = [...unavailableStaff].sort((a, b) => {
       const aHasClass = a.reasons.some(r => r.startsWith('Class:'));
@@ -192,6 +322,20 @@ export default function App() {
     return null;
   };
 
+  // --------------------------------------------------------------------------
+  // CSV PARSING FUNCTIONS
+  // --------------------------------------------------------------------------
+  
+  /**
+   * Parses the main staff import CSV (from Microsoft Forms)
+   * 
+   * Expected format:
+   * - Headers include "Any notes" somewhere
+   * - Data rows have: [0-4: form metadata], [5: name], [6: building], [7: days off], [8: notes]
+   * 
+   * @param {string} text - Raw CSV text content
+   * @returns {Array} - Array of staff data objects
+   */
   const parseCSV = (text) => {
     const lines = text.split('\n');
     const result = [];
@@ -224,6 +368,12 @@ export default function App() {
     return result;
   };
 
+  /**
+   * Parses a single CSV line, handling quoted values with commas
+   * 
+   * @param {string} line - Single line from CSV file
+   * @returns {Array} - Array of cell values
+   */
   const parseCSVLine = (line) => {
     const result = [];
     let current = '';
@@ -244,6 +394,22 @@ export default function App() {
     return result;
   };
 
+  /**
+   * Parses a class schedule CSV file
+   * 
+   * Expected format:
+   *   Line 1: StaffName,,,
+   *   Line 2: Day,Start Time,End Time,Course
+   *   Line 3+: Monday,8:00 AM,10:50 AM,COURSE-101
+   * 
+   * Handles:
+   * - Windows (\r\n) and Unix (\n) line endings
+   * - 12-hour (8:00 AM) and 24-hour (08:00) time formats
+   * - Day name variations (Monday, Mon, etc.)
+   * 
+   * @param {string} text - Raw CSV text content
+   * @returns {Object} - { staffName: string, classes: Array }
+   */
   // Parse class schedule CSV
   const parseClassCSV = (text) => {
     // Handle Windows line endings (\r\n) and normalize
@@ -294,6 +460,18 @@ export default function App() {
     return { staffName, classes };
   };
 
+  // --------------------------------------------------------------------------
+  // FILE IMPORT HANDLERS
+  // --------------------------------------------------------------------------
+  
+  /**
+   * Processes the main staff import file (CSV from Microsoft Forms)
+   * 
+   * Creates staff members, initializes their schedules, and parses day-off requests
+   * Day-off numbers are converted to actual dates based on the selected month
+   * 
+   * @param {File} file - The uploaded file object
+   */
   const processFile = useCallback((file) => {
     if (!file) return;
 
@@ -397,6 +575,11 @@ export default function App() {
     }
   }, [processFile]);
 
+  // --------------------------------------------------------------------------
+  // STAFF MANAGEMENT FUNCTIONS
+  // --------------------------------------------------------------------------
+  
+  /** Adds a new staff member manually */
   const addStaff = () => {
     if (newStaffName.trim()) {
       const newId = Date.now();
@@ -427,6 +610,11 @@ export default function App() {
     setClassCSVFiles(restCSVFiles);
   };
 
+  // --------------------------------------------------------------------------
+  // CLASS SCHEDULE MANAGEMENT
+  // --------------------------------------------------------------------------
+  
+  /** Adds a single class to a staff member's schedule */
   const addClass = (staffId, classData) => {
     setClassSchedules({
       ...classSchedules,
@@ -455,6 +643,11 @@ export default function App() {
     });
   };
 
+  // --------------------------------------------------------------------------
+  // DAY-OFF REQUEST MANAGEMENT
+  // --------------------------------------------------------------------------
+  
+  /** Adds a day-off request for a staff member */
   const addDayOff = (staffId, date) => {
     const dateStr = date.toISOString().split('T')[0];
     if (!dayOffRequests[staffId]?.includes(dateStr)) {
@@ -472,6 +665,11 @@ export default function App() {
     });
   };
 
+  // --------------------------------------------------------------------------
+  // EXAM SCHEDULE MANAGEMENT
+  // --------------------------------------------------------------------------
+  
+  /** Adds an exam to a staff member's schedule */
   const addExam = (staffId, examData) => {
     setExamSchedules({
       ...examSchedules,
@@ -500,6 +698,22 @@ export default function App() {
     });
   };
 
+  // --------------------------------------------------------------------------
+  // AVAILABILITY CHECKING
+  // --------------------------------------------------------------------------
+  
+  /**
+   * Checks if a staff member is available for a shift on a given date
+   * 
+   * Checks against:
+   * 1. Day-off requests
+   * 2. Class schedules (if class overlaps 20:00-22:00 shift time)
+   * 3. Exam schedules (if exam season mode enabled - day before, of, and after)
+   * 
+   * @param {number} staffId - The staff member's ID
+   * @param {Date} date - The date to check
+   * @returns {boolean} - True if available, false if not
+   */
   const isAvailable = (staffId, date) => {
     const dateStr = date.toISOString().split('T')[0];
     const dayOfWeek = date.getDay();
@@ -534,6 +748,21 @@ export default function App() {
     return true;
   };
 
+  // --------------------------------------------------------------------------
+  // SCHEDULE GENERATION
+  // --------------------------------------------------------------------------
+  
+  /**
+   * Auto-generates shift assignments for the current month
+   * 
+   * Algorithm:
+   * 1. Counts existing shifts for each staff member
+   * 2. For each unassigned day, finds available staff
+   * 3. Assigns to the person with fewest shifts (fair distribution)
+   * 4. Leaves day unassigned (null) if no one is available
+   * 
+   * Does NOT overwrite existing manual assignments
+   */
   const generateSchedule = () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -565,10 +794,19 @@ export default function App() {
     setSchedule({ ...schedule, ...newSchedule });
   };
 
+  /** Clears all shift assignments for the current building */
   const clearSchedule = () => setSchedule({});
+  
+  /** Manually assigns a specific staff member to a shift */
   const assignShift = (dateStr, staffId) => { setSchedule({ ...schedule, [dateStr]: staffId }); setEditingShift(null); };
+  
+  /** Removes a shift assignment */
   const unassignShift = (dateStr) => { const { [dateStr]: _, ...rest } = schedule; setSchedule(rest); };
 
+  /**
+   * Pre-generate check - shows conflict warning modal if there are conflicts
+   * Otherwise proceeds directly to generation
+   */
   const handlePreGenerate = () => {
     if (conflicts.length > 0) {
       setShowConflictModal(true);
@@ -584,6 +822,11 @@ export default function App() {
     generateSchedule();
   };
 
+  // --------------------------------------------------------------------------
+  // UI HELPER FUNCTIONS
+  // --------------------------------------------------------------------------
+  
+  /** Calculates total shifts assigned to each staff member */
   const shiftCounts = useMemo(() => {
     const counts = {};
     staff.forEach(s => counts[s.id] = 0);
@@ -591,6 +834,13 @@ export default function App() {
     return counts;
   }, [schedule, staff]);
 
+  /**
+   * Generates array of dates for the calendar grid
+   * Includes null values for padding at the start of the month
+   * 
+   * @param {Date} date - Any date in the target month
+   * @returns {Array} - Array of Date objects (or null for empty cells)
+   */
   const getDaysInMonth = (date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -602,27 +852,40 @@ export default function App() {
     return days;
   };
 
+  /** Navigates to previous or next month */
   const navigateMonth = (direction) => {
     const newDate = new Date(currentMonth);
     newDate.setMonth(newDate.getMonth() + direction);
     setCurrentMonth(newDate);
   };
 
+  // --------------------------------------------------------------------------
+  // TAB CONFIGURATION
+  // --------------------------------------------------------------------------
+  
+  /**
+   * Navigation tabs configuration
+   * Each tab represents a different section of the application
+   */
   const tabs = [
-    { id: 'import', label: 'Import', icon: Upload },
-    { id: 'staff', label: 'Staff', icon: Users },
-    { id: 'classes', label: 'Classes', icon: BookOpen },
-    { id: 'dayoff', label: 'Days Off', icon: Clock },
-    { id: 'exams', label: 'Exams', icon: GraduationCap },
-    { id: 'conflicts', label: 'Conflicts', icon: AlertTriangle },
-    { id: 'schedule', label: 'Schedule', icon: Calendar },
+    { id: 'import', label: 'Import', icon: Upload },        // Import staff from CSV
+    { id: 'staff', label: 'Staff', icon: Users },           // View/manage staff list
+    { id: 'classes', label: 'Classes', icon: BookOpen },    // Upload class schedules
+    { id: 'dayoff', label: 'Days Off', icon: Clock },       // Manage day-off requests
+    { id: 'exams', label: 'Exams', icon: GraduationCap },   // Manage exam schedules
+    { id: 'conflicts', label: 'Conflicts', icon: AlertTriangle }, // View scheduling conflicts
+    { id: 'schedule', label: 'Schedule', icon: Calendar },  // View/edit shift calendar
   ];
+
+  // --------------------------------------------------------------------------
+  // RENDER - Main Application UI
+  // --------------------------------------------------------------------------
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%)', fontFamily: "'DM Sans', system-ui, sans-serif", color: '#e2e8f0', padding: '24px' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 8px 0', background: 'linear-gradient(135deg, #a5b4fc 0%, #f0abfc 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>RA Shift Scheduler v3</h1>
+          <h1 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 8px 0', background: 'linear-gradient(135deg, #a5b4fc 0%, #f0abfc 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>RA Shift Scheduler</h1>
           <p style={{ margin: 0, color: '#94a3b8', fontSize: '15px' }}>Import from Microsoft Forms • CSV Class Schedules • Shifts: 20:00 - 22:00 Daily</p>
         </div>
 
@@ -847,6 +1110,31 @@ Tuesday,6:00 PM,8:50 PM,COURSE-202`}
   );
 }
 
+// ============================================================================
+// STAFF CLASS SECTION COMPONENT
+// ============================================================================
+
+/**
+ * Component for managing a single staff member's class schedule
+ * 
+ * Features:
+ * - CSV file upload for bulk class import
+ * - Manual class entry form
+ * - Display of all classes with delete option
+ * - Clear all classes button
+ * 
+ * Props:
+ * @param {Object} member - Staff member object
+ * @param {Array} classes - Array of class objects
+ * @param {Array} csvFiles - Array of uploaded CSV file info
+ * @param {Function} onAddClass - Callback to add single class
+ * @param {Function} onAddMultipleClasses - Callback to add multiple classes
+ * @param {Function} onRemoveClass - Callback to remove a class
+ * @param {Function} onClearAllClasses - Callback to clear all classes
+ * @param {Function} onAddCSVFile - Callback to track uploaded CSV
+ * @param {Function} onRemoveCSVFile - Callback to remove CSV file reference
+ * @param {Function} parseClassCSV - CSV parsing function
+ */
 function StaffClassSection({ member, classes, csvFiles, onAddClass, onAddMultipleClasses, onRemoveClass, onClearAllClasses, onAddCSVFile, onRemoveCSVFile, parseClassCSV }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newClass, setNewClass] = useState({ day: 1, start: '18:00', end: '21:00', name: '' });
@@ -982,6 +1270,24 @@ function StaffClassSection({ member, classes, csvFiles, onAddClass, onAddMultipl
   );
 }
 
+// ============================================================================
+// STAFF DAY-OFF SECTION COMPONENT
+// ============================================================================
+
+/**
+ * Component for managing a single staff member's day-off requests
+ * 
+ * Features:
+ * - Date picker to add new day-off requests
+ * - Display of all requested days with delete option
+ * - Days are sorted chronologically
+ * 
+ * Props:
+ * @param {Object} member - Staff member object
+ * @param {Array} dayOffs - Array of date strings (YYYY-MM-DD)
+ * @param {Function} onAddDayOff - Callback to add a day off
+ * @param {Function} onRemoveDayOff - Callback to remove a day off
+ */
 function StaffDayOffSection({ member, dayOffs, onAddDayOff, onRemoveDayOff }) {
   const [selectedDate, setSelectedDate] = useState('');
   const handleAdd = () => { if (selectedDate) { onAddDayOff(new Date(selectedDate + 'T12:00:00')); setSelectedDate(''); } };
@@ -998,6 +1304,27 @@ function StaffDayOffSection({ member, dayOffs, onAddDayOff, onRemoveDayOff }) {
   );
 }
 
+// ============================================================================
+// STAFF EXAM SECTION COMPONENT
+// ============================================================================
+
+/**
+ * Component for managing a single staff member's exam schedule
+ * 
+ * Features:
+ * - Form to add new exams (name, date, time)
+ * - Display of all exams with delete option
+ * - When "Exam Season Mode" is enabled, RAs get 3 days off per exam:
+ *   - Day before exam (study day)
+ *   - Day of exam
+ *   - Day after exam (recovery)
+ * 
+ * Props:
+ * @param {Object} member - Staff member object
+ * @param {Array} exams - Array of exam objects { date, name, time }
+ * @param {Function} onAddExam - Callback to add an exam
+ * @param {Function} onRemoveExam - Callback to remove an exam
+ */
 function StaffExamSection({ member, exams, onAddExam, onRemoveExam }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newExam, setNewExam] = useState({ date: '', name: '', time: '09:00' });
